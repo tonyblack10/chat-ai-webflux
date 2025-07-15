@@ -1,0 +1,27 @@
+package io.github.tonyblack10.chatwebflux;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+
+@Service
+public class ChatService {
+
+  private final ChatClient chatClient;
+
+  public ChatService(ChatClient.Builder chatClientBuilder, VectorStore vectorStore) {
+    this.chatClient = chatClientBuilder
+        .defaultAdvisors(new QuestionAnswerAdvisor(vectorStore))
+        .build();
+  }
+
+  public Flux<String> askQuestion(String question) {
+    return this.chatClient.prompt()
+        .user(question)
+        .stream()
+        .content();
+  }
+
+}
