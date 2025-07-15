@@ -1,5 +1,9 @@
 package io.github.tonyblack10.chatwebflux.util;
 
+import org.springframework.ai.document.Document;
+import org.springframework.ai.reader.tika.TikaDocumentReader;
+import org.springframework.ai.transformer.splitter.TokenTextSplitter;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.messaging.Message;
@@ -15,82 +19,111 @@ import java.util.Set;
 @Component
 public class DocumentProcessorUtil {
 
-    private static final long MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20MB in bytes
+  private static final long MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20MB in bytes
 
-    // Formatos suportados pelo Tika Document Reader
-    private static final Set<String> SUPPORTED_CONTENT_TYPES = Set.of(
-        "application/pdf",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.ms-excel",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "application/vnd.ms-powerpoint",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "text/plain",
-        "text/html",
-        "text/xml",
-        "application/rtf",
-        "application/vnd.oasis.opendocument.text",
-        "application/vnd.oasis.opendocument.spreadsheet",
-        "application/vnd.oasis.opendocument.presentation"
-    );
+  // Formatos suportados pelo Tika Document Reader
+  private static final Set<String> SUPPORTED_CONTENT_TYPES = Set.of(
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "text/plain",
+      "text/html",
+      "text/xml",
+      "application/rtf",
+      "application/vnd.oasis.opendocument.text",
+      "application/vnd.oasis.opendocument.spreadsheet",
+      "application/vnd.oasis.opendocument.presentation"
+  );
 
-    public Mono<List<FilePart>> validateFiles(List<FilePart> fileParts) {
-        if (fileParts.isEmpty()) {
-            return Mono.error(new IllegalArgumentException("Nenhum arquivo foi enviado"));
-        }
+  public Flux<List<Document>> processDocuments(Flux<FilePart> files) {
+    return files
+        .collectList()
+        .flatMap(this::validateFiles)
+        .flatMapMany(Flux::fromIterable)
+        .flatMap(this::convertToMessage)
+        .flatMap(this::readDocument)
+        .flatMap(this::splitDocuments);
+  }
 
-        // Validar tipos de arquivo
-        for (FilePart filePart : fileParts) {
-            MediaType contentType = filePart.headers().getContentType();
-            String contentTypeStr = contentType != null
-                ? contentType.toString()
-                : "application/octet-stream";
-
-            if (!SUPPORTED_CONTENT_TYPES.contains(contentTypeStr)) {
-                return Mono.error(new IllegalArgumentException(
-                    "Tipo de arquivo não suportado: " + contentTypeStr + " para o arquivo: " + filePart.filename()));
-            }
-        }
-
-        // Calcular tamanho total dos arquivos
-        return Flux.fromIterable(fileParts)
-            .flatMap(filePart ->
-                filePart.content()
-                    .map(dataBuffer -> (long) dataBuffer.readableByteCount())
-                    .reduce(0L, Long::sum)
-            )
-            .reduce(0L, Long::sum)
-            .flatMap(totalSize -> {
-                if (totalSize > MAX_TOTAL_SIZE) {
-                    return Mono.error(new IllegalArgumentException(
-                        "Tamanho total dos arquivos excede o limite de 20MB. Tamanho atual: " +
-                        (totalSize / 1024 / 1024) + "MB"));
-                }
-                return Mono.just(fileParts);
-            });
+  public Mono<List<FilePart>> validateFiles(List<FilePart> fileParts) {
+    if (fileParts.isEmpty()) {
+      return Mono.error(new IllegalArgumentException("Nenhum arquivo foi enviado"));
     }
 
-    public Mono<Message<byte[]>> convertToMessage(FilePart filePart) {
-        return filePart.content()
-            .map(dataBuffer -> {
-                byte[] bytes = new byte[dataBuffer.readableByteCount()];
-                dataBuffer.read(bytes);
-                // DataBuffer não precisa de release manual no WebFlux
-                return bytes;
+    // Validar tipos de arquivo
+    for (FilePart filePart : fileParts) {
+      MediaType contentType = filePart.headers().getContentType();
+      String contentTypeStr = contentType != null
+          ? contentType.toString()
+          : "application/octet-stream";
+
+      if (!SUPPORTED_CONTENT_TYPES.contains(contentTypeStr)) {
+        return Mono.error(new IllegalArgumentException(
+            "Tipo de arquivo não suportado: " + contentTypeStr + " para o arquivo: "
+                + filePart.filename()));
+      }
+    }
+
+    // Calcular tamanho total dos arquivos
+    return Flux.fromIterable(fileParts)
+        .flatMap(filePart ->
+            filePart.content()
+                .map(dataBuffer -> (long) dataBuffer.readableByteCount())
+                .reduce(0L, Long::sum)
+        )
+        .reduce(0L, Long::sum)
+        .flatMap(totalSize -> {
+          if (totalSize > MAX_TOTAL_SIZE) {
+            return Mono.error(new IllegalArgumentException(
+                "Tamanho total dos arquivos excede o limite de 20MB. Tamanho atual: " +
+                    (totalSize / 1024 / 1024) + "MB"));
+          }
+          return Mono.just(fileParts);
+        });
+  }
+
+  public Mono<Message<byte[]>> convertToMessage(FilePart filePart) {
+    return filePart.content()
+        .map(dataBuffer -> {
+          byte[] bytes = new byte[dataBuffer.readableByteCount()];
+          dataBuffer.read(bytes);
+          return bytes;
+        })
+        .reduce(new byte[0], this::combineByteArrays)
+        .map(bytes -> MessageBuilder.withPayload(bytes)
+            .setHeader("file_name", filePart.filename())
+            .setHeader("content_type", filePart.headers().getContentType())
+            .build())
+        .subscribeOn(Schedulers.boundedElastic());
+  }
+
+  public Mono<List<Document>> readDocument(Message<byte[]> message) {
+    return Mono.fromCallable(() ->
+        new TikaDocumentReader(new ByteArrayResource(message.getPayload()))
+            .get()
+            .stream()
+            .peek(document -> {
+              document.getMetadata()
+                  .put("source", message.getHeaders().get("file_name"));
             })
-            .reduce(new byte[0], this::combineByteArrays)
-            .map(bytes -> MessageBuilder.withPayload(bytes)
-                .setHeader("file_name", filePart.filename())
-                .setHeader("content_type", filePart.headers().getContentType())
-                .build())
-            .subscribeOn(Schedulers.boundedElastic());
-    }
+            .toList()
+    ).subscribeOn(Schedulers.boundedElastic());
+  }
 
-    private byte[] combineByteArrays(byte[] array1, byte[] array2) {
-        byte[] result = new byte[array1.length + array2.length];
-        System.arraycopy(array1, 0, result, 0, array1.length);
-        System.arraycopy(array2, 0, result, array1.length, array2.length);
-        return result;
-    }
+  public Mono<List<Document>> splitDocuments(List<Document> documents) {
+    return Mono.fromCallable(() ->
+        new TokenTextSplitter().apply(documents)
+    ).subscribeOn(Schedulers.boundedElastic());
+  }
+
+  private byte[] combineByteArrays(byte[] array1, byte[] array2) {
+    byte[] result = new byte[array1.length + array2.length];
+    System.arraycopy(array1, 0, result, 0, array1.length);
+    System.arraycopy(array2, 0, result, array1.length, array2.length);
+    return result;
+  }
 }
