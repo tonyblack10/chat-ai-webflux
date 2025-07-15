@@ -43,45 +43,49 @@ public class DocumentProcessorUtil {
   );
 
   public Flux<List<Document>> processDocuments(Flux<FilePart> files) {
-    LOGGER.info("🚀 Iniciando processamento completo de documentos");
+    LOGGER.info("🚀 Starting complete document processing");
 
     return files
         .collectList()
-        .doOnNext(fileParts -> LOGGER.info("📂 Recebidos {} arquivos para processamento: {}",
+        .doOnNext(fileParts -> LOGGER.info("📂 Received {} files for processing: {}",
             fileParts.size(),
             fileParts.stream().map(FilePart::filename).toList()))
         .flatMap(this::validateFiles)
-        .doOnNext(validatedFiles -> LOGGER.info("✅ Validação concluída com sucesso para {} arquivos", validatedFiles.size()))
+        .doOnNext(validatedFiles -> LOGGER.info("✅ Validation completed successfully for {} files",
+            validatedFiles.size()))
         .flatMapMany(Flux::fromIterable)
         .flatMap(this::convertToMessage)
-        .doOnNext(message -> LOGGER.info("🔄 Arquivo '{}' convertido para mensagem ({} bytes)",
+        .doOnNext(message -> LOGGER.info("🔄 File '{}' converted to message ({} bytes)",
             message.getHeaders().get("file_name"),
             message.getPayload().length))
         .flatMap(this::readDocument)
         .doOnNext(documents -> {
-            String source = (String) documents.getFirst().getMetadata().get("source");
-            int totalChars = documents.stream()
-                .filter(doc -> doc.getText() != null)
-                .mapToInt(doc -> doc.getText().length())
-                .sum();
-            LOGGER.info("📖 Extração de texto concluída para '{}': {} documentos, {} caracteres totais",
-                source, documents.size(), totalChars);
+          String source = (String) documents.getFirst().getMetadata().get("source");
+          int totalChars = documents.stream()
+              .filter(doc -> doc.getText() != null)
+              .mapToInt(doc -> doc.getText().length())
+              .sum();
+          LOGGER.info("📖 Text extraction completed for '{}': {} documents, {} total characters",
+              source, documents.size(), totalChars);
         })
         .flatMap(this::splitDocuments)
         .doOnNext(splitDocs -> {
-            String source = (String) splitDocs.getFirst().getMetadata().get("source");
-            LOGGER.info("✂️ Divisão em chunks concluída para '{}': {} chunks gerados", source, splitDocs.size());
+          String source = (String) splitDocs.getFirst().getMetadata().get("source");
+          LOGGER.info("✂️ Chunk splitting completed for '{}': {} chunks generated", source,
+              splitDocs.size());
         })
-        .doOnComplete(() -> LOGGER.info("🎉 Processamento de documentos concluído com sucesso"))
-        .doOnError(error -> LOGGER.error("❌ Erro durante o processamento de documentos: {}", error.getMessage(), error));
+        .doOnComplete(() -> LOGGER.info("🎉 Document processing completed successfully"))
+        .doOnError(
+            error -> LOGGER.error("❌ Error during document processing: {}", error.getMessage(),
+                error));
   }
 
   public Mono<List<FilePart>> validateFiles(List<FilePart> fileParts) {
-    LOGGER.info("🔍 Iniciando validação de {} arquivos", fileParts.size());
+    LOGGER.info("🔍 Starting validation of {} files", fileParts.size());
 
     if (fileParts.isEmpty()) {
-      LOGGER.error("❌ Nenhum arquivo foi enviado para validação");
-      return Mono.error(new IllegalArgumentException("Nenhum arquivo foi enviado"));
+      LOGGER.error("❌ No files were sent for validation");
+      return Mono.error(new IllegalArgumentException("No files were sent"));
     }
 
     // Validar tipos de arquivo
@@ -91,17 +95,18 @@ public class DocumentProcessorUtil {
           ? contentType.toString()
           : "application/octet-stream";
 
-      LOGGER.debug("🔎 Validando arquivo '{}' - tipo: {}", filePart.filename(), contentTypeStr);
+      LOGGER.debug("🔎 Validating file '{}' - type: {}", filePart.filename(), contentTypeStr);
 
       if (!SUPPORTED_CONTENT_TYPES.contains(contentTypeStr)) {
-        LOGGER.error("🚫 Tipo de arquivo não suportado: {} para o arquivo: {}", contentTypeStr, filePart.filename());
+        LOGGER.error("🚫 Unsupported file type: {} for file: {}", contentTypeStr,
+            filePart.filename());
         return Mono.error(new IllegalArgumentException(
-            "Tipo de arquivo não suportado: " + contentTypeStr + " para o arquivo: "
+            "Unsupported file type: " + contentTypeStr + " for file: "
                 + filePart.filename()));
       }
     }
 
-    LOGGER.info("✅ Tipos de arquivo validados com sucesso");
+    LOGGER.info("✅ File types validated successfully");
 
     // Calcular tamanho total dos arquivos
     return Flux.fromIterable(fileParts)
@@ -109,28 +114,28 @@ public class DocumentProcessorUtil {
             filePart.content()
                 .map(dataBuffer -> (long) dataBuffer.readableByteCount())
                 .reduce(0L, Long::sum)
-                .doOnNext(size -> LOGGER.debug("📏 Tamanho do arquivo '{}': {} KB",
+                .doOnNext(size -> LOGGER.debug("📏 File '{}' size: {} KB",
                     filePart.filename(), size / 1024))
         )
         .reduce(0L, Long::sum)
-        .doOnNext(totalSize -> LOGGER.info("📊 Tamanho total dos arquivos: {} MB",
+        .doOnNext(totalSize -> LOGGER.info("📊 Total file size: {} MB",
             String.format("%.2f", (double) totalSize / (1024 * 1024))))
         .flatMap(totalSize -> {
           if (totalSize > MAX_TOTAL_SIZE) {
-            LOGGER.error("🚫 Tamanho total dos arquivos ({} MB) excede o limite de 20MB",
+            LOGGER.error("🚫 Total file size ({} MB) exceeds 20MB limit",
                 String.format("%.2f", (double) totalSize / (1024 * 1024)));
             return Mono.error(new IllegalArgumentException(
-                "Tamanho total dos arquivos excede o limite de 20MB. Tamanho atual: " +
+                "Total file size exceeds 20MB limit. Current size: " +
                     (totalSize / 1024 / 1024) + "MB"));
           }
-          LOGGER.info("✅ Validação de tamanho concluída - dentro do limite permitido");
+          LOGGER.info("✅ Size validation completed - within allowed limit");
           return Mono.just(fileParts);
         });
   }
 
   public Mono<Message<byte[]>> convertToMessage(FilePart filePart) {
     String filename = filePart.filename();
-    LOGGER.debug("🔄 Convertendo arquivo '{}' para Message", filename);
+    LOGGER.debug("🔄 Converting file '{}' to Message", filename);
 
     return filePart.content()
         .map(dataBuffer -> {
@@ -140,7 +145,7 @@ public class DocumentProcessorUtil {
         })
         .reduce(new byte[0], this::combineByteArrays)
         .map(bytes -> {
-          LOGGER.debug("📦 Arquivo '{}' convertido - {} bytes processados", filename, bytes.length);
+          LOGGER.debug("📦 File '{}' converted - {} bytes processed", filename, bytes.length);
           return MessageBuilder.withPayload(bytes)
               .setHeader("file_name", filename)
               .setHeader("content_type", filePart.headers().getContentType())
@@ -154,7 +159,7 @@ public class DocumentProcessorUtil {
     byte[] payload = message.getPayload();
     int fileSize = payload.length;
 
-    LOGGER.info("📖 Extraindo texto do arquivo '{}' ({} KB) usando Tika Document Reader",
+    LOGGER.info("📖 Extracting text from file '{}' ({} KB) using Tika Document Reader",
         filename, fileSize / 1024);
 
     return Mono.fromCallable(() -> {
@@ -167,7 +172,7 @@ public class DocumentProcessorUtil {
             document.getMetadata().put("source", filename);
             String text = document.getText();
             int charCount = text != null ? text.length() : 0;
-            LOGGER.debug("📄 Documento extraído: {} caracteres", charCount);
+            LOGGER.debug("📄 Document extracted: {} characters", charCount);
           })
           .toList();
 
@@ -177,7 +182,7 @@ public class DocumentProcessorUtil {
           .mapToInt(doc -> doc.getText().length())
           .sum();
 
-      LOGGER.info("✅ Extração Tika concluída para '{}' em {}ms - {} documentos, {} caracteres",
+      LOGGER.info("✅ Tika extraction completed for '{}' in {}ms - {} documents, {} characters",
           filename, (endTime - startTime), documents.size(), totalChars);
 
       return documents;
@@ -188,7 +193,8 @@ public class DocumentProcessorUtil {
     String sourceFile = documents.isEmpty() ? "unknown" :
         (String) documents.getFirst().getMetadata().get("source");
 
-    LOGGER.info("✂️ Dividindo {} documentos de '{}' em chunks menores", documents.size(), sourceFile);
+    LOGGER.info("✂️ Splitting {} documents from '{}' into smaller chunks", documents.size(),
+        sourceFile);
 
     return Mono.fromCallable(() -> {
       long startTime = System.currentTimeMillis();
@@ -197,10 +203,10 @@ public class DocumentProcessorUtil {
 
       long endTime = System.currentTimeMillis();
 
-      LOGGER.info("✅ Divisão concluída para '{}' em {}ms - {} chunks gerados",
+      LOGGER.info("✅ Splitting completed for '{}' in {}ms - {} chunks generated",
           sourceFile, (endTime - startTime), splitDocuments.size());
 
-      // Log estatísticas dos chunks
+      // Log chunk statistics
       if (!splitDocuments.isEmpty()) {
         int minChunkSize = splitDocuments.stream()
             .filter(doc -> doc.getText() != null)
@@ -218,7 +224,7 @@ public class DocumentProcessorUtil {
             .average()
             .orElse(0);
 
-        LOGGER.info("📊 Estatísticas dos chunks de '{}': min={} chars, max={} chars, média={} chars",
+        LOGGER.info("📊 Chunk statistics for '{}': min={} chars, max={} chars, avg={} chars",
             sourceFile, minChunkSize, maxChunkSize, String.format("%.0f", avgChunkSize));
       }
 
