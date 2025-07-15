@@ -1,7 +1,10 @@
 package io.github.tonyblack10.chatwebflux.service;
 
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -11,9 +14,15 @@ public class ChatService {
 
   private final ChatClient chatClient;
 
-  public ChatService(ChatClient.Builder chatClientBuilder, VectorStore vectorStore) {
+  public ChatService(ChatClient.Builder chatClientBuilder, VectorStore vectorStore, ChatMemory chatMemory) {
+    var questionAnswerAdvisor = QuestionAnswerAdvisor.builder(vectorStore)
+        .searchRequest(SearchRequest.builder().build())
+        .build();
+
+    var chatMemoryAdvisor = MessageChatMemoryAdvisor.builder(chatMemory).build();
+
     this.chatClient = chatClientBuilder
-        .defaultAdvisors(new QuestionAnswerAdvisor(vectorStore))
+        .defaultAdvisors(chatMemoryAdvisor, questionAnswerAdvisor)
         .build();
   }
 
