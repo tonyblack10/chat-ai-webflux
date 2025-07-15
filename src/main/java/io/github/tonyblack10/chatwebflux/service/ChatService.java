@@ -1,4 +1,4 @@
-package io.github.tonyblack10.chatwebflux;
+package io.github.tonyblack10.chatwebflux.service;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
