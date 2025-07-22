@@ -4,6 +4,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
@@ -14,7 +15,8 @@ public class ChatService {
 
   private final ChatClient chatClient;
 
-  public ChatService(ChatClient.Builder chatClientBuilder, VectorStore vectorStore, ChatMemory chatMemory) {
+  public ChatService(ChatClient.Builder chatClientBuilder, VectorStore vectorStore,
+      ChatMemory chatMemory, ToolCallbackProvider tools) {
     var questionAnswerAdvisor = QuestionAnswerAdvisor.builder(vectorStore)
         .searchRequest(SearchRequest.builder().build())
         .build();
@@ -23,6 +25,7 @@ public class ChatService {
 
     this.chatClient = chatClientBuilder
         .defaultAdvisors(chatMemoryAdvisor, questionAnswerAdvisor)
+        .defaultToolCallbacks(tools)
         .build();
   }
 
