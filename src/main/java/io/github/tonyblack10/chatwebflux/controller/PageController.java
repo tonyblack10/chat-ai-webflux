@@ -30,7 +30,7 @@ public class PageController {
         model.put("timestamp", System.currentTimeMillis());
 
         StringOutput output = new StringOutput();
-        templateEngine.render("pages/chatai.jte", model, output);
+        templateEngine.render("pages/chat_ai.jte", model, output);
 
         return Mono.just(output.toString());
     }
