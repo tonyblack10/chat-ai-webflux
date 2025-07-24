@@ -24,7 +24,7 @@ public class PageController {
     }
 
     @GetMapping(value = "/chat", produces = MediaType.TEXT_HTML_VALUE)
-    public Mono<String> helloHtmx() {
+    public Mono<String> chat() {
         Map<String, Object> model = new HashMap<>();
         model.put("message", "Hello from HTMX! This content was loaded dynamically.");
         model.put("timestamp", System.currentTimeMillis());
