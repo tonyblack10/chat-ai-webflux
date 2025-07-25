@@ -2,10 +2,10 @@ package io.github.tonyblack10.chatwebflux.controller;
 
 import gg.jte.TemplateEngine;
 import gg.jte.output.StringOutput;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
@@ -21,13 +21,54 @@ public class ChatAiController {
 
   @PostMapping(value = "/chat/send", produces = MediaType.TEXT_HTML_VALUE)
   public Mono<String> chat(String message) {
+    // Simular um atraso para processamento da mensagem
+    return Mono.delay(Duration.ofMillis(500))
+        .then(Mono.defer(() -> {
+          // Aqui você pode adicionar a lógica para processar a mensagem com um serviço de IA
+          String aiResponse = generateAiResponse("webflux");
+
+          Map<String, Object> model = new HashMap<>();
+          model.put("response", aiResponse);
+
+          StringOutput output = new StringOutput();
+          templateEngine.render("fragments/ai_message.jte", model, output);
+
+          return Mono.just(output.toString());
+        }));
+  }
+
+  @PostMapping(value = "/chat/new", produces = MediaType.TEXT_HTML_VALUE)
+  public Mono<String> newChat() {
+    // Limpar o histórico de chat e retornar mensagem inicial
     Map<String, Object> model = new HashMap<>();
-    model.put("response", "<p>Quais são as melhores práticas para desenvolvimento web com Spring Boot e WebFlux?</p>");
+    model.put("response", "<p>Olá! Como posso ajudar você hoje?</p>");
 
     StringOutput output = new StringOutput();
-    templateEngine.render("fragments/user_message.jte", model, output);
+    templateEngine.render("fragments/ai_message.jte", model, output);
 
     return Mono.just(output.toString());
   }
 
+  /**
+   * Método para gerar uma resposta da IA com base na pergunta.
+   * Em um ambiente real, isso se conectaria ao seu serviço de IA.
+   */
+  private String generateAiResponse(String message) {
+    // Exemplo de resposta para demonstração
+    if (message.toLowerCase().contains("webflux")) {
+      return "<p>Sobre Spring WebFlux, aqui estão algumas informações importantes:</p>" +
+          "<ul>" +
+          "<li><strong>Programação reativa</strong> - WebFlux usa Reactor para programação reativa</li>" +
+          "<li><strong>Non-blocking</strong> - Todas as operações são não bloqueantes</li>" +
+          "<li><strong>Escalabilidade</strong> - Ideal para aplicações com alto throughput</li>" +
+          "</ul>" +
+          "<p>Exemplo de código WebFlux:</p>" +
+          "<pre><code>@GetMapping(\"/items\")\n" +
+          "public Flux&lt;Item&gt; getAllItems() {\n" +
+          "    return itemRepository.findAll();\n" +
+          "}</code></pre>";
+    } else {
+      return "<p>Entendi sua mensagem. Em que mais posso ajudar?</p>";
+    }
+  }
 }

@@ -1,6 +1,18 @@
 @template.layout.main(content = @`
     <!-- Container principal do chat -->
     <div class="chat-container d-flex flex-column vh-100">
+        <!-- Cabeçalho com botão nova conversa -->
+        <div class="chat-header d-flex justify-content-between align-items-center mb-3">
+            <h2 class="mb-0 fw-bold">Chat AI</h2>
+            <button id="new-chat" class="btn btn-primary d-flex align-items-center gap-2"
+                   hx-post="/chat/new"
+                   hx-target="#chat-messages"
+                   hx-indicator="#loading-indicator"
+                   hx-swap="innerHTML">
+                <i class="bi bi-plus-lg"></i>
+                Nova Conversa
+            </button>
+        </div>
 
         <!-- Indicador de carregamento -->
         <div id="loading-indicator" class="htmx-indicator d-flex justify-content-center my-2">
@@ -20,49 +32,6 @@
                     <div class="message-content">
                         <div class="message-text markdown-content">
                             <p>Olá! Como posso ajudar você hoje?</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Mensagem de exemplo do usuário -->
-                <div class="message user-message">
-                    <div class="message-avatar">
-                        <i class="bi bi-person-fill"></i>
-                    </div>
-                    <div class="message-content">
-                        <div class="message-text">
-                            <p>Quais são as melhores práticas para desenvolvimento web com Spring Boot e WebFlux?</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Mensagem de exemplo da IA com formatação markdown -->
-                <div class="message ai-message">
-                    <div class="message-avatar">
-                        <i class="bi bi-robot"></i>
-                    </div>
-                    <div class="message-content">
-                        <div class="message-text markdown-content">
-                            <p>Aqui estão algumas melhores práticas para desenvolvimento com Spring Boot e WebFlux:</p>
-                            <ol>
-                                <li><strong>Use programação reativa de ponta a ponta</strong> - Não misture código bloqueante com não-bloqueante</li>
-                                <li><strong>Utilize o tipo Mono para respostas únicas</strong> e <strong>Flux para streams de dados</strong></li>
-                                <li><strong>Evite bloqueios</strong> - Nunca chame <code>block()</code>, <code>blockFirst()</code> ou <code>blockLast()</code> em produção</li>
-                            </ol>
-                            <p>Exemplo de um controlador WebFlux:</p>
-                            <pre><code>@RestController
-@RequestMapping("/api/users")
-public class UserController {
-    private final UserService userService;
-
-    // Constructor injection
-    public UserController(UserService userService) {
-        this.userService = userService;
-    }
-
-    @GetMapping("/{id}")
-    </code></pre>
-                            <p>Lembre-se que WebFlux é mais útil para aplicações com muitas conexões concorrentes ou operações de I/O assíncronas.</p>
                         </div>
                     </div>
                 </div>
@@ -196,6 +165,16 @@ public class UserController {
             margin-left: 10px;
         }
 
+        /* Efeito de digitação para o cursor */
+        .cursor {
+            display: inline-block;
+            width: 0.5em;
+            height: 1em;
+            background: var(--bs-primary);
+            margin-left: 2px;
+            animation: cursor-blink 1s infinite;
+        }
+
         .dot-typing {
             display: inline-block;
             animation: dotTyping 1.5s infinite;
@@ -224,6 +203,11 @@ public class UserController {
             100% { content: ''; }
         }
 
+        @keyframes cursor-blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
         /* Responsividade */
         @media (max-width: 768px) {
             .chat-container {
@@ -245,15 +229,14 @@ public class UserController {
     </style>
 
     <script>
-        // Script para autoexpansão do textarea
         document.addEventListener('DOMContentLoaded', function() {
             const textarea = document.getElementById('message-input');
+            const chatMessages = document.getElementById('chat-messages');
+            const chatForm = document.getElementById('chat-form');
 
             // Função para ajustar altura do textarea
             function adjustTextareaHeight() {
-                // Reset height to auto para calcular tamanho correto
                 textarea.style.height = 'auto';
-                // Set height para o scroll height para expandir conforme conteúdo
                 textarea.style.height = (textarea.scrollHeight) + 'px';
             }
 
@@ -268,29 +251,115 @@ public class UserController {
             }
 
             // Observador para detectar novas mensagens e rolar
-            const observer = new MutationObserver(scrollToBottom);
-            const chatMessages = document.getElementById('chat-messages');
+            const observer = new MutationObserver(mutations => {
+                scrollToBottom();
+
+                // Inicializar efeitos de digitação para novas mensagens da IA
+                mutations.forEach(mutation => {
+                    if (mutation.type === 'childList') {
+                        mutation.addedNodes.forEach(node => {
+                            if (node.nodeType === Node.ELEMENT_NODE) {
+                                const typingElements = node.querySelectorAll('.typing-effect');
+                                typingElements.forEach(element => {
+                                    initTypingEffect(element);
+                                });
+                            }
+                        });
+                    }
+                });
+            });
 
             observer.observe(chatMessages, {
                 childList: true,
                 subtree: true
             });
 
+            // Modificar envio do formulário para renderização local da mensagem do usuário
+            chatForm.addEventListener('submit', function(event) {
+                // Não interromper o fluxo do HTMX
+                // event.preventDefault();
+
+                const message = textarea.value.trim();
+                if (message) {
+                    // Renderizar mensagem do usuário localmente
+                    addUserMessage(message);
+                }
+            });
+
+            // Função para adicionar mensagem do usuário
+            function addUserMessage(message) {
+                const userMessageHTML =
+                    '<div class="message user-message">' +
+                        '<div class="message-avatar">' +
+                            '<i class="bi bi-person-fill"></i>' +
+                        '</div>' +
+                        '<div class="message-content">' +
+                            '<div class="message-text">' +
+                                '<p>' + escapeHTML(message) + '</p>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>';
+
+                chatMessages.insertAdjacentHTML('beforeend', userMessageHTML);
+                scrollToBottom();
+            }
+
+            // Função para escapar HTML e evitar XSS
+            function escapeHTML(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            // Efeito de digitação para as mensagens da IA
+            function initTypingEffect(element) {
+                if (!element || element.getAttribute('data-typing-started') === 'true') return;
+
+                element.setAttribute('data-typing-started', 'true');
+                const fullText = element.getAttribute('data-full-text');
+                if (!fullText) return;
+
+                const typingSpeed = 20; // velocidade de digitação (ms)
+                let i = 0;
+
+                element.innerHTML = ''; // Limpar o conteúdo
+                const cursor = document.createElement('span');
+                cursor.className = 'cursor';
+                element.appendChild(cursor);
+
+                const typeCharacter = () => {
+                    if (i < fullText.length) {
+                        // Inserir antes do cursor
+                        cursor.insertAdjacentHTML('beforebegin', fullText.charAt(i));
+                        i++;
+
+                        // Aceleração do efeito de digitação para textos longos
+                        const speed = fullText.length > 500 ?
+                            (i > 100 ? typingSpeed/4 : typingSpeed/2) :
+                            typingSpeed;
+
+                        setTimeout(typeCharacter, speed);
+                    } else {
+                        // Quando terminar, usar o HTML completo para garantir formatação correta
+                        element.innerHTML = fullText;
+                    }
+                };
+
+                setTimeout(typeCharacter, 300); // Pequeno atraso para iniciar a digitação
+            }
+
             // Limpar o campo após envio do formulário
-            document.getElementById('chat-form').addEventListener('htmx:afterOnLoad', function() {
+            chatForm.addEventListener('htmx:afterOnLoad', function() {
                 textarea.value = '';
                 textarea.style.height = 'auto';
                 textarea.focus();
             });
 
-            // Carregar histórico ao iniciar (se existir)
-            document.body.addEventListener('htmx:load', function() {
-                scrollToBottom();
-            });
-
             // Inicializar scroll
             scrollToBottom();
+
+            // Inicializar efeitos de digitação existentes
+            document.querySelectorAll('.typing-effect').forEach(initTypingEffect);
         });
     </script>
 `)
-
