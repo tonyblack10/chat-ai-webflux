@@ -30,6 +30,14 @@
                         <i class="bi bi-robot"></i>
                     </div>
                     <div class="message-content">
+                        <div class="message-header d-flex justify-content-between align-items-center">
+                            <span class="message-timestamp text-muted small">
+                                ${java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss").format(java.time.LocalDateTime.now())}
+                            </span>
+                            <button class="btn btn-sm btn-link copy-btn" title="Copiar mensagem">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
                         <div class="message-text markdown-content">
                             <p>Olá! Como posso ajudar você hoje?</p>
                         </div>
@@ -135,6 +143,46 @@
         .message-text {
             padding: 8px 12px;
             border-radius: 8px;
+        }
+
+        /* Estilos para o cabeçalho da mensagem com timestamp e botão de cópia */
+        .message-header {
+            padding: 0 12px 4px;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            margin-bottom: 6px;
+        }
+
+        [data-bs-theme="dark"] .message-header {
+            border-bottom-color: rgba(255,255,255,0.1);
+        }
+
+        .copy-btn {
+            padding: 0 4px;
+            color: var(--bs-secondary);
+            transition: color 0.2s;
+        }
+
+        .copy-btn:hover {
+            color: var(--bs-primary);
+        }
+
+        /* Feedback de cópia */
+        .copy-feedback {
+            position: absolute;
+            background: var(--bs-success);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: opacity 0.3s, transform 0.3s;
+            z-index: 100;
+        }
+
+        .copy-feedback.show {
+            opacity: 1;
+            transform: translateY(0);
         }
 
         /* Estilos para Markdown */
@@ -302,12 +350,21 @@
 
             // Função para adicionar mensagem do usuário
             function addUserMessage(message) {
+                const currentTime = new Date();
+                const formattedTime = formatDateTime(currentTime);
+
                 const userMessageHTML =
                     '<div class="message user-message">' +
                         '<div class="message-avatar">' +
                             '<i class="bi bi-person-fill"></i>' +
                         '</div>' +
                         '<div class="message-content">' +
+                            '<div class="message-header d-flex justify-content-between align-items-center">' +
+                                '<span class="message-timestamp text-muted small">' + formattedTime + '</span>' +
+                                '<button class="btn btn-sm btn-link copy-btn" title="Copiar mensagem">' +
+                                    '<i class="bi bi-clipboard"></i>' +
+                                '</button>' +
+                            '</div>' +
                             '<div class="message-text">' +
                                 '<p>' + escapeHTML(message) + '</p>' +
                             '</div>' +
@@ -316,14 +373,66 @@
 
                 chatMessages.insertAdjacentHTML('beforeend', userMessageHTML);
                 scrollToBottom();
+
+                // Adicionar event listener para o botão de cópia
+                const copyButtons = chatMessages.querySelectorAll('.copy-btn');
+                const lastCopyButton = copyButtons[copyButtons.length - 1];
+                if (lastCopyButton) {
+                    lastCopyButton.addEventListener('click', handleCopyClick);
+                }
             }
 
-            // Função para escapar HTML e evitar XSS
-            function escapeHTML(text) {
-                const div = document.createElement('div');
-                div.textContent = text;
-                return div.innerHTML;
+            // Formatar data e hora no padrão solicitado
+            function formatDateTime(date) {
+                const day = String(date.getDate()).padStart(2, '0');
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const year = date.getFullYear();
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                const seconds = String(date.getSeconds()).padStart(2, '0');
+
+                return day + '/' + month + '/' + year + ' ' + hours + ':' + minutes + ':' + seconds;
             }
+
+            // Handler para o clique no botão de cópia
+            function handleCopyClick(event) {
+                // Encontrar o conteúdo da mensagem
+                const messageContent = event.target.closest('.message-content');
+                const messageText = messageContent.querySelector('.message-text');
+
+                // Extrair o texto sem formatação
+                const textToCopy = messageText.textContent || messageText.innerText;
+
+                // Copiar para a área de transferência
+                navigator.clipboard.writeText(textToCopy.trim())
+                    .then(() => showCopyFeedback(event.target.closest('.copy-btn')))
+                    .catch(err => console.error('Erro ao copiar texto: ', err));
+            }
+
+            // Mostrar feedback visual da cópia
+            function showCopyFeedback(button) {
+                // Criar elemento de feedback
+                const feedback = document.createElement('span');
+                feedback.className = 'copy-feedback';
+                feedback.textContent = 'Copiado!';
+
+                // Posicionar próximo ao botão
+                button.appendChild(feedback);
+
+                // Mostrar feedback
+                setTimeout(() => feedback.classList.add('show'), 10);
+
+                // Remover feedback após 2 segundos
+                setTimeout(() => {
+                    feedback.classList.remove('show');
+                    setTimeout(() => feedback.remove(), 300);
+                }, 2000);
+            }
+
+            // Adicionar event listeners para os botões de cópia existentes
+            document.querySelectorAll('.copy-btn').forEach(button => {
+                button.addEventListener('click', handleCopyClick);
+            });
 
             // Função para renderizar markdown de forma segura
             function renderMarkdown(text) {
