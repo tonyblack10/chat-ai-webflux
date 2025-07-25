@@ -53,7 +53,8 @@
                   hx-post="/chat/send"
                   hx-target="#chat-messages"
                   hx-indicator="#typing-indicator"
-                  hx-swap="beforeend">
+                  hx-swap="beforeend"
+                  hx-headers='{"x-conversation-id": ""}'> <!-- O valor será preenchido via JS -->
                 <div class="input-group">
                     <textarea name="message" id="message-input"
                               class="form-control"
@@ -285,6 +286,24 @@
             const chatMessages = document.getElementById('chat-messages');
             const chatForm = document.getElementById('chat-form');
             const sendButton = document.getElementById('send-button');
+
+            // Gerar um UUID para o conversationId
+            const conversationId = generateUUID();
+            console.log("Conversation ID: ", conversationId);
+
+            // Definir o header com o conversationId para todas as requisições HTMX
+            chatForm.setAttribute('hx-headers', JSON.stringify({
+                "x-conversation-id": conversationId
+            }));
+
+            // Função para gerar UUID v4
+            function generateUUID() {
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                    const r = Math.random() * 16 | 0,
+                        v = c === 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                });
+            }
 
             // Configurar marked para segurança e estilização
             marked.setOptions({
