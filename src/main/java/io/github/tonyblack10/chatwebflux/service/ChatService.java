@@ -31,6 +31,7 @@ public class ChatService {
 
   public Flux<String> askQuestion(String question) {
     return this.chatClient.prompt()
+        .system("Retorne o conteudo da pergunta no formato markdown.")
         .user(question)
         .stream()
         .content();

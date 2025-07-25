@@ -2,6 +2,8 @@ package io.github.tonyblack10.chatwebflux.controller;
 
 import gg.jte.TemplateEngine;
 import gg.jte.output.StringOutput;
+import io.github.tonyblack10.chatwebflux.dto.QuestionDTO;
+import io.github.tonyblack10.chatwebflux.service.ChatService;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -14,19 +16,22 @@ import reactor.core.publisher.Mono;
 public class ChatAiController {
 
   private final TemplateEngine templateEngine;
+  private final ChatService chatService;
 
-  public ChatAiController(TemplateEngine templateEngine) {
+  public ChatAiController(TemplateEngine templateEngine, ChatService chatService) {
     this.templateEngine = templateEngine;
+    this.chatService = chatService;
   }
 
   @PostMapping(value = "/chat/send", produces = MediaType.TEXT_HTML_VALUE)
-  public Mono<String> chat(String message) {
-    // Simular um atraso para processamento da mensagem
-    return Mono.delay(Duration.ofMillis(500))
-        .then(Mono.defer(() -> {
-          // Aqui você pode adicionar a lógica para processar a mensagem com um serviço de IA
-          String aiResponse = generateAiResponse("webflux");
+  public Mono<String> chat(QuestionDTO question) {
+    System.out.println("Received question: " + question.message());
 
+    // Usar o chatService para processar a mensagem de forma reativa
+    return chatService.askQuestion(question.message())
+        .collectList()
+        .map(chunks -> String.join("", chunks))
+        .flatMap(aiResponse -> {
           Map<String, Object> model = new HashMap<>();
           model.put("response", aiResponse);
 
@@ -34,7 +39,7 @@ public class ChatAiController {
           templateEngine.render("fragments/ai_message.jte", model, output);
 
           return Mono.just(output.toString());
-        }));
+        });
   }
 
   @PostMapping(value = "/chat/new", produces = MediaType.TEXT_HTML_VALUE)
