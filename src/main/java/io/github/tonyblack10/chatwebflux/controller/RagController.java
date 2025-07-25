@@ -8,10 +8,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestPart;
-import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -47,6 +44,48 @@ public class RagController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "Erro interno: " + error.getMessage());
+            return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response));
+        });
+  }
+
+  @GetMapping(value = "/history", produces = MediaType.APPLICATION_JSON_VALUE)
+  @ResponseBody
+  public Mono<ResponseEntity<Map<String, Object>>> getUploadHistory() {
+    return ragService.getUploadHistory()
+        .collectList()
+        .map(files -> {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("files", files);
+            return ResponseEntity.ok(response);
+        })
+        .onErrorResume(Exception.class, error -> {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Erro ao buscar histórico: " + error.getMessage());
+            return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response));
+        });
+  }
+
+  @DeleteMapping(value = "/document/{fileName}", produces = MediaType.APPLICATION_JSON_VALUE)
+  @ResponseBody
+  public Mono<ResponseEntity<Map<String, Object>>> deleteDocument(@PathVariable String fileName) {
+    return ragService.deleteDocument(fileName)
+        .map(deleted -> {
+            Map<String, Object> response = new HashMap<>();
+            if (deleted) {
+                response.put("success", true);
+                response.put("message", "Documento removido com sucesso");
+            } else {
+                response.put("success", false);
+                response.put("message", "Documento não encontrado");
+            }
+            return ResponseEntity.ok(response);
+        })
+        .onErrorResume(Exception.class, error -> {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Erro ao excluir documento: " + error.getMessage());
             return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response));
         });
   }
