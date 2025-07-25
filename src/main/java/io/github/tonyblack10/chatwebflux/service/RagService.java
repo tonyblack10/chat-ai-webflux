@@ -1,7 +1,11 @@
 package io.github.tonyblack10.chatwebflux.service;
 
 import io.github.tonyblack10.chatwebflux.util.DocumentProcessorUtil;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.http.codec.multipart.FilePart;
@@ -24,10 +28,30 @@ public class RagService {
     this.documentProcessorUtil = documentProcessorUtil;
   }
 
-  public Mono<Void> processDocuments(Flux<FilePart> files) {
+  public Flux<Map<String, String>> processDocuments(Flux<FilePart> files) {
     return documentProcessorUtil.processDocuments(files)
         .flatMap(this::saveToVectorStore)
-        .then();
+        .flatMapIterable(documents -> documents)
+        .map(this::documentToFileInfo);
+  }
+
+  private Map<String, String> documentToFileInfo(Document document) {
+    LOGGER.info("Processing document: {}", document);
+
+    Map<String, String> fileInfo = new HashMap<>();
+    Map<String, Object> metadata = document.getMetadata();
+
+    // Obter informações básicas do documento
+    fileInfo.put("name", metadata.getOrDefault("filename", "Documento sem nome").toString());
+    fileInfo.put("size", metadata.getOrDefault("size", "0").toString());
+    fileInfo.put("status", "Processado");
+
+    // Adicionar timestamp atual formatado
+    LocalDateTime now = LocalDateTime.now();
+    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
+    fileInfo.put("timestamp", now.format(formatter));
+
+    return fileInfo;
   }
 
   public Mono<List<Document>> saveToVectorStore(List<Document> documents) {

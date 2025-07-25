@@ -1,6 +1,8 @@
 package io.github.tonyblack10.chatwebflux.controller;
 
 import io.github.tonyblack10.chatwebflux.service.RagService;
+import java.util.Map;
+import java.util.HashMap;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -23,15 +25,29 @@ public class RagController {
     this.ragService = ragService;
   }
 
-  @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
   @ResponseBody
-  public Mono<ResponseEntity<String>> uploadDocuments(@RequestPart("files") Flux<FilePart> files) {
+  public Mono<ResponseEntity<Map<String, Object>>> uploadDocuments(@RequestPart("files") Flux<FilePart> files) {
     return ragService.processDocuments(files)
-        .then(Mono.just(ResponseEntity.ok("Documentos processados e armazenados no vector store com sucesso!")))
-        .onErrorResume(IllegalArgumentException.class,
-            error -> Mono.just(ResponseEntity.badRequest().body(error.getMessage())))
-        .onErrorResume(Exception.class,
-            error -> Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body("Erro interno: " + error.getMessage())));
+        .collectList()
+        .map(processedFiles -> {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Documentos processados e armazenados no vector store com sucesso!");
+            response.put("files", processedFiles);
+            return ResponseEntity.ok(response);
+        })
+        .onErrorResume(IllegalArgumentException.class, error -> {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", error.getMessage());
+            return Mono.just(ResponseEntity.badRequest().body(response));
+        })
+        .onErrorResume(Exception.class, error -> {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Erro interno: " + error.getMessage());
+            return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response));
+        });
   }
 }

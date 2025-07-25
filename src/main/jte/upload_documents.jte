@@ -1,154 +1,432 @@
-@import io.github.tonyblack10.chatwebflux.controller.RagController
-
-@param RagController ragController
-
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Upload de Documentos - RAG System</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://unpkg.com/htmx.org@1.9.9"></script>
-    <style>
-        body {
-            background-color: #f8f9fa;
-            min-height: 100vh;
-        }
-        .upload-container {
-            max-width: 800px;
-            margin: 0 auto;
-            background-color: #fff;
-            border-radius: 10px;
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
-            padding: 30px;
-            margin-top: 50px;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .file-list {
-            margin-top: 20px;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-        .file-item {
-            padding: 10px;
-            background-color: #f8f9fa;
-            margin-bottom: 10px;
-            border-radius: 5px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .progress {
-            margin-top: 20px;
-            margin-bottom: 20px;
-            height: 20px;
-        }
-        .upload-message {
-            margin-top: 20px;
-            padding: 15px;
-            border-radius: 5px;
-        }
-        .success-message {
-            background-color: #d4edda;
-            color: #155724;
-        }
-        .error-message {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-        #dropArea {
-            border: 2px dashed #007bff;
-            border-radius: 8px;
-            padding: 50px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        #dropArea:hover, #dropArea.drag-over {
-            background-color: #e9f5ff;
-            border-color: #0056b3;
-        }
-        .nav-link {
-            color: #495057;
-        }
-        .nav-link.active {
-            font-weight: bold;
-            color: #007bff;
-        }
-    </style>
-</head>
-<body>
+@template.layout.main(activeTab = "upload", content = @`
     <div class="container mt-4">
-
-        <div class="upload-container">
-            <div class="header">
-                <h1>Upload de Documentos</h1>
-                <p>Faça upload dos seus documentos para utilizar no sistema RAG</p>
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h2 class="mb-0">Upload de Documentos</h2>
             </div>
 
-            <div
-                id="dropArea"
-                onclick="document.getElementById('fileInput').click()">
-                <h4>Arraste e solte arquivos aqui ou clique para selecionar</h4>
-                <p>Tamanho máximo total: 20MB</p>
-            </div>
-
-            <form id="uploadForm"
-                  hx-encoding="multipart/form-data"
-                  hx-post="/rag/upload"
-                  hx-trigger="submit"
-                  hx-indicator="#progressContainer"
-                  hx-target="#uploadResponse">
-
-                <input type="file" id="fileInput" name="files" multiple style="display: none"
-                       onchange="updateFileList()">
-
-                <div class="d-flex justify-content-between mt-3">
-                    <span id="totalSize">Tamanho total: 0 KB</span>
-                    <button type="button" class="btn btn-secondary" onclick="clearFiles()">Limpar</button>
+            <div class="card-body">
+                <div class="mb-4">
+                    <p class="text-muted">Faça upload dos seus documentos para processamento e indexação no sistema de RAG.</p>
+                    <ul class="text-muted small">
+                        <li>Formatos aceitos: PDF, DOC, DOCX, TXT, CSV</li>
+                        <li>Tamanho máximo: 20MB no total</li>
+                        <li>Você pode enviar múltiplos arquivos simultaneamente</li>
+                    </ul>
                 </div>
 
-                <div class="file-list mt-4" id="fileList">
-                    <p>Nenhum arquivo selecionado</p>
+                <!-- Área de mensagens -->
+                <div id="message-area"></div>
+
+                <!-- Área de upload com drag & drop -->
+                <div id="drop-area" class="border border-2 border-dashed rounded-3 p-5 text-center mb-3">
+                    <div class="py-3">
+                        <i class="bi bi-cloud-upload fs-1 text-primary mb-2"></i>
+                        <h4>Arraste e solte arquivos aqui</h4>
+                        <p class="text-muted">ou</p>
+                        <button type="button" id="select-files-btn" class="btn btn-outline-primary">
+                            <i class="bi bi-folder"></i> Selecionar Arquivos
+                        </button>
+                    </div>
                 </div>
 
-                <div class="progress mt-4 mb-4" id="progressContainer">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated"
-                         id="uploadProgress"
-                         role="progressbar"
-                         aria-valuenow="0"
-                         aria-valuemin="0"
-                         aria-valuemax="100"
-                         style="width: 0%">0%</div>
+                <!-- Formulário oculto para upload -->
+                <form id="upload-form"
+                      hx-encoding="multipart/form-data"
+                      hx-post="/rag/upload"
+                      hx-target="#result-container"
+                      hx-indicator="#progress-indicator"
+                      hx-trigger="submit"
+                      hx-on::after-request="resetForm()"
+                      class="d-none">
+                    <input type="file" id="file-input" name="files" multiple
+                           accept=".pdf,.doc,.docx,.txt,.csv">
+                    <button type="submit" id="upload-btn">Enviar</button>
+                </form>
+
+                <!-- Lista de arquivos selecionados -->
+                <div id="file-list-container" class="d-none mb-3">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                            <h5 class="mb-0">Arquivos selecionados</h5>
+                            <span id="total-size-badge" class="badge bg-info">0 KB</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Nome</th>
+                                        <th>Tipo</th>
+                                        <th>Tamanho</th>
+                                        <th>Status</th>
+                                        <th>Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="file-list">
+                                    <!-- Arquivos serão adicionados via JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="d-grid gap-2 mt-4">
-                    <button class="btn btn-primary" type="submit" id="uploadButton" disabled>
-                        Processar Documentos
+                <!-- Botões de ação -->
+                <div class="d-flex justify-content-end gap-2">
+                    <button id="clear-btn" class="btn btn-outline-secondary d-none">
+                        <i class="bi bi-x-circle"></i> Limpar
+                    </button>
+                    <button id="submit-btn" class="btn btn-primary d-none">
+                        <i class="bi bi-upload"></i> Fazer Upload
                     </button>
                 </div>
 
-                <div id="uploadResponse" class="mt-4"></div>
-            </form>
+                <!-- Área de progresso -->
+                <div id="progress-indicator" class="htmx-indicator mt-3">
+                    <div class="progress" style="height: 25px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                             role="progressbar"
+                             aria-valuenow="0"
+                             aria-valuemin="0"
+                             aria-valuemax="100"
+                             style="width: 0%">
+                            <span id="progress-text">0%</span>
+                        </div>
+                    </div>
+                    <p class="text-center mt-2">
+                        <small class="text-muted">Processando arquivos, por favor aguarde...</small>
+                    </p>
+                </div>
+
+                <!-- Resultados do upload -->
+                <div id="result-container" class="mt-3"></div>
+
+                <!-- Histórico de uploads (placeholder) -->
+                <div id="upload-history" class="mt-4">
+                    <h5>Histórico de Uploads</h5>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Nome do Arquivo</th>
+                                    <th>Tamanho</th>
+                                    <th>Data do Upload</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">Nenhum arquivo processado</td>
+                                </tr>
+                                <!-- Os arquivos processados serão adicionados aqui pelo servidor -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-        const dropArea = document.getElementById('dropArea');
-        const fileInput = document.getElementById('fileInput');
-        const fileList = document.getElementById('fileList');
-        const totalSizeElement = document.getElementById('totalSize');
-        const uploadButton = document.getElementById('uploadButton');
-        const progressBar = document.getElementById('uploadProgress');
-        const MAX_SIZE = 20 * 1024 * 1024; // 20MB em bytes
+        // Configuração inicial e constantes
+        const MAX_SIZE_MB = 20;
+        const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+        const VALID_EXTENSIONS = ['.pdf', '.doc', '.docx', '.txt', '.csv'];
 
-        // Eventos para arrastar e soltar
+        // Elementos DOM
+        const dropArea = document.getElementById('drop-area');
+        const fileInput = document.getElementById('file-input');
+        const fileList = document.getElementById('file-list');
+        const fileListContainer = document.getElementById('file-list-container');
+        const totalSizeBadge = document.getElementById('total-size-badge');
+        const selectFilesBtn = document.getElementById('select-files-btn');
+        const submitBtn = document.getElementById('submit-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const uploadForm = document.getElementById('upload-form');
+        const messageArea = document.getElementById('message-area');
+        const uploadHistoryTable = document.querySelector('#upload-history table tbody');
+
+        // Variáveis de estado
+        let selectedFiles = [];
+        let totalSize = 0;
+
+        // Gerenciamento de arquivos
+        function updateFileList() {
+            // Limpar lista existente
+            fileList.innerHTML = '';
+
+            // Populando a tabela com os arquivos
+            if (selectedFiles.length > 0) {
+                fileListContainer.classList.remove('d-none');
+                submitBtn.classList.remove('d-none');
+                clearBtn.classList.remove('d-none');
+
+                selectedFiles.forEach((file, index) => {
+                    const row = document.createElement('tr');
+
+                    // Nome do arquivo
+                    const nameCell = document.createElement('td');
+                    nameCell.textContent = file.name;
+                    row.appendChild(nameCell);
+
+                    // Tipo do arquivo
+                    const typeCell = document.createElement('td');
+                    typeCell.textContent = file.type || getFileExtension(file.name);
+                    row.appendChild(typeCell);
+
+                    // Tamanho do arquivo
+                    const sizeCell = document.createElement('td');
+                    sizeCell.textContent = formatFileSize(file.size);
+                    row.appendChild(sizeCell);
+
+                    // Status
+                    const statusCell = document.createElement('td');
+                    const isValid = isValidFile(file);
+                    statusCell.innerHTML = isValid
+                        ? '<span class="badge bg-success">Válido</span>'
+                        : '<span class="badge bg-danger">Inválido</span>';
+                    row.appendChild(statusCell);
+
+                    // Ações
+                    const actionCell = document.createElement('td');
+                    const removeBtn = document.createElement('button');
+                    removeBtn.className = 'btn btn-sm btn-outline-danger';
+                    removeBtn.innerHTML = '<i class="bi bi-trash"></i>';
+                    removeBtn.onclick = () => removeFile(index);
+                    actionCell.appendChild(removeBtn);
+                    row.appendChild(actionCell);
+
+                    // Adicionar linha à tabela
+                    fileList.appendChild(row);
+                });
+
+                // Atualizar tamanho total
+                totalSizeBadge.textContent = formatFileSize(totalSize);
+
+                // Verificar se podemos fazer upload (tamanho e tipos válidos)
+                const isValidUpload = totalSize <= MAX_SIZE_BYTES &&
+                                      selectedFiles.every(isValidFile);
+
+                submitBtn.disabled = !isValidUpload;
+
+                if (!isValidUpload) {
+                    if (totalSize > MAX_SIZE_BYTES) {
+                        showMessage('error', 'O tamanho total dos arquivos excede o limite de ' + MAX_SIZE_MB + 'MB');
+                    } else {
+                        showMessage('error', 'Existem arquivos com tipos inválidos');
+                    }
+                } else {
+                    messageArea.innerHTML = '';
+                }
+            } else {
+                fileListContainer.classList.add('d-none');
+                submitBtn.classList.add('d-none');
+                clearBtn.classList.add('d-none');
+                messageArea.innerHTML = '';
+            }
+        }
+
+        function addFiles(fileList) {
+            // Convertendo FileList para Array para facilitar manipulação
+            const filesArray = Array.from(fileList);
+
+            // Calculando tamanho total incluindo os novos arquivos
+            const newTotalSize = totalSize + filesArray.reduce((sum, file) => sum + file.size, 0);
+
+            // Verificando tipos de arquivo
+            const invalidFiles = filesArray.filter(file => !isValidFile(file));
+
+            // Avisar sobre arquivos inválidos
+            if (invalidFiles.length > 0) {
+                const invalidNames = invalidFiles.map(f => f.name).join(', ');
+                showMessage('warning', 'Tipo(s) de arquivo inválido(s): ' + invalidNames);
+            }
+
+            // Verificar tamanho
+            if (newTotalSize > MAX_SIZE_BYTES) {
+                showMessage('error', 'O tamanho total excede o limite de ' + MAX_SIZE_MB + 'MB');
+            }
+
+            // Adicionar arquivos válidos à seleção
+            filesArray.forEach(file => {
+                if (isValidFile(file)) {
+                    selectedFiles.push(file);
+                }
+            });
+
+            // Recalcular tamanho total
+            totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+
+            // Atualizar a interface
+            updateFileList();
+        }
+
+        function removeFile(index) {
+            // Atualizar tamanho total
+            totalSize -= selectedFiles[index].size;
+
+            // Remover arquivo
+            selectedFiles.splice(index, 1);
+
+            // Atualizar interface
+            updateFileList();
+        }
+
+        function isValidFile(file) {
+            const extension = getFileExtension(file.name).toLowerCase();
+            return VALID_EXTENSIONS.includes(extension);
+        }
+
+        function getFileExtension(filename) {
+            return '.' + filename.split('.').pop().toLowerCase();
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function clearFiles() {
+            selectedFiles = [];
+            totalSize = 0;
+            updateFileList();
+            fileInput.value = '';
+        }
+
+        function showMessage(type, message) {
+            // Limpar mensagens existentes
+            messageArea.innerHTML = '';
+
+            // Criar novo alerta
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-' + (type === 'error' ? 'danger' : type) + ' alert-dismissible fade show';
+            alert.innerHTML =
+                message +
+                '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>';
+
+            messageArea.appendChild(alert);
+        }
+
+        function resetForm() {
+            clearFiles();
+            updateProgressBar(0);
+        }
+
+        function updateProgressBar(percent) {
+            const progressBar = document.querySelector('.progress-bar');
+            const progressText = document.getElementById('progress-text');
+
+            if (progressBar && progressText) {
+                progressBar.style.width = percent + '%';
+                progressBar.setAttribute('aria-valuenow', percent);
+                progressText.textContent = percent + '%';
+            }
+        }
+
+        // Função para atualizar a tabela de histórico com arquivos processados
+        function updateUploadHistory(files) {
+            // Limpar a mensagem "Nenhum arquivo processado" se existir
+            const emptyRow = uploadHistoryTable.querySelector('tr td[colspan="5"]');
+            if (emptyRow) {
+                uploadHistoryTable.innerHTML = '';
+            }
+
+            // Adicionar cada arquivo à tabela de histórico
+            files.forEach(file => {
+                const row = document.createElement('tr');
+
+                // Nome do arquivo
+                const nameCell = document.createElement('td');
+                nameCell.textContent = file.name;
+                row.appendChild(nameCell);
+
+                // Tamanho do arquivo
+                const sizeCell = document.createElement('td');
+                sizeCell.textContent = file.size;
+                row.appendChild(sizeCell);
+
+                // Data do upload
+                const dateCell = document.createElement('td');
+                dateCell.textContent = file.timestamp;
+                row.appendChild(dateCell);
+
+                // Status
+                const statusCell = document.createElement('td');
+                statusCell.innerHTML = '<span class="badge bg-success">Processado</span>';
+                row.appendChild(statusCell);
+
+                // Ações
+                const actionCell = document.createElement('td');
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'btn btn-sm btn-outline-danger';
+                deleteBtn.innerHTML = '<i class="bi bi-trash"></i>';
+                deleteBtn.onclick = () => deleteProcessedFile(file.name);
+                actionCell.appendChild(deleteBtn);
+                row.appendChild(actionCell);
+
+                // Adicionar à tabela
+                uploadHistoryTable.appendChild(row);
+            });
+        }
+
+        // Função para simular a exclusão de um arquivo processado
+        function deleteProcessedFile(fileName) {
+            // Em uma implementação real, aqui você faria uma chamada ao backend para excluir o arquivo
+            if (confirm('Tem certeza que deseja remover o arquivo ' + fileName + '?')) {
+                // Por enquanto, vamos apenas remover da tabela
+                const rows = uploadHistoryTable.querySelectorAll('tr');
+                rows.forEach(row => {
+                    if (row.cells[0].textContent === fileName) {
+                        row.remove();
+                    }
+                });
+
+                // Se não houver mais arquivos, exibir mensagem
+                if (uploadHistoryTable.children.length === 0) {
+                    uploadHistoryTable.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum arquivo processado</td></tr>';
+                }
+            }
+        }
+
+        // Event listeners
+        selectFilesBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                addFiles(e.target.files);
+            }
+        });
+
+        clearBtn.addEventListener('click', clearFiles);
+
+        submitBtn.addEventListener('click', () => {
+            if (selectedFiles.length > 0) {
+                // Substituir os arquivos no input de arquivo do formulário
+                const dataTransfer = new DataTransfer();
+                selectedFiles.forEach(file => {
+                    dataTransfer.items.add(file);
+                });
+                fileInput.files = dataTransfer.files;
+
+                // Inicializar barra de progresso
+                updateProgressBar(0);
+
+                // Submeter o formulário
+                uploadForm.dispatchEvent(new Event('submit', { bubbles: true }));
+            }
+        });
+
+        // Eventos Drag & Drop
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             dropArea.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
         });
 
         function preventDefaults(e) {
@@ -157,151 +435,58 @@
         }
 
         ['dragenter', 'dragover'].forEach(eventName => {
-            dropArea.addEventListener(eventName, highlight, false);
+            dropArea.addEventListener(eventName, () => {
+                dropArea.classList.add('border-primary');
+                dropArea.classList.add('bg-light');
+            });
         });
 
         ['dragleave', 'drop'].forEach(eventName => {
-            dropArea.addEventListener(eventName, unhighlight, false);
+            dropArea.addEventListener(eventName, () => {
+                dropArea.classList.remove('border-primary');
+                dropArea.classList.remove('bg-light');
+            });
         });
 
-        function highlight() {
-            dropArea.classList.add('drag-over');
-        }
-
-        function unhighlight() {
-            dropArea.classList.remove('drag-over');
-        }
-
-        dropArea.addEventListener('drop', handleDrop, false);
-
-        function handleDrop(e) {
+        dropArea.addEventListener('drop', (e) => {
             const dt = e.dataTransfer;
             const files = dt.files;
-            fileInput.files = files;
-            updateFileList();
-        }
-
-        function updateFileList() {
-            const files = fileInput.files;
-            let totalSize = 0;
 
             if (files.length > 0) {
-                let fileListHTML = '';
-                for (const file of files) {
-                    totalSize += file.size;
-                    fileListHTML += '<div class="file-item">' +
-                        '<div>' +
-                        '<strong>' + file.name + '</strong>' +
-                        '<span class="text-secondary ms-2">' + formatFileSize(file.size) + '</span>' +
-                        '</div>' +
-                        '<span class="badge bg-primary">' + getFileType(file) + '</span>' +
-                        '</div>';
-                }
-                fileList.innerHTML = fileListHTML;
-
-                if (totalSize > MAX_SIZE) {
-                    totalSizeElement.innerHTML = '<span class="text-danger">Tamanho total excedido: ' + formatFileSize(totalSize) + ' / 20MB</span>';
-                    uploadButton.disabled = true;
-                } else {
-                    totalSizeElement.innerHTML = 'Tamanho total: ' + formatFileSize(totalSize);
-                    uploadButton.disabled = false;
-                }
-            } else {
-                fileList.innerHTML = '<p>Nenhum arquivo selecionado</p>';
-                totalSizeElement.innerHTML = 'Tamanho total: 0 KB';
-                uploadButton.disabled = true;
-            }
-        }
-
-        function clearFiles() {
-            fileInput.value = '';
-            fileList.innerHTML = '<p>Nenhum arquivo selecionado</p>';
-            totalSizeElement.innerHTML = 'Tamanho total: 0 KB';
-            uploadButton.disabled = true;
-
-            // Limpar mensagem de resposta
-            const uploadResponse = document.getElementById('uploadResponse');
-            if (uploadResponse) {
-                uploadResponse.innerHTML = '';
-            }
-
-            // Resetar barra de progresso
-            progressBar.style.width = '0%';
-            progressBar.textContent = '0%';
-        }
-
-        function formatFileSize(bytes) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-
-        function getFileType(file) {
-            const extension = file.name.split('.').pop().toLowerCase();
-            const docTypes = ['doc', 'docx'];
-            const pdfTypes = ['pdf'];
-            const txtTypes = ['txt', 'md', 'rtf'];
-            const imageTypes = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-
-            if (docTypes.includes(extension)) return 'DOC';
-            if (pdfTypes.includes(extension)) return 'PDF';
-            if (txtTypes.includes(extension)) return 'TXT';
-            if (imageTypes.includes(extension)) return 'IMG';
-            return extension.toUpperCase();
-        }
-
-        // Configurar eventos HTMX para controle de progresso
-        document.addEventListener('htmx:xhr:loadstart', function() {
-            // Mostrar o contêiner de progresso antes do envio
-            const progressContainer = document.getElementById('progressContainer');
-            progressContainer.style.display = 'block';
-            progressBar.style.width = '0%';
-            progressBar.textContent = '0%';
-        });
-
-        document.addEventListener('htmx:xhr:progress', function(evt) {
-            // Verificar se evt.detail e evt.detail.xhr existem antes de acessar propriedades
-            if (evt.detail && evt.detail.loaded && evt.detail.total) {
-                const percent = Math.round((evt.detail.loaded / evt.detail.total) * 100);
-                progressBar.style.width = percent + '%';
-                progressBar.textContent = percent + '%';
+                addFiles(files);
             }
         });
 
-        document.addEventListener('htmx:beforeSend', function(evt) {
-            // Configurar o upload para relatar progresso
-            if (evt.detail && evt.detail.xhr) {
-                evt.detail.xhr.upload.onprogress = function(e) {
-                    if (e.lengthComputable) {
-                        const percent = Math.round((e.loaded / e.total) * 100);
-                        progressBar.style.width = percent + '%';
-                        progressBar.textContent = percent + '%';
+        // Adicionar listener para eventos HTMX de progresso
+        document.body.addEventListener('htmx:xhr:progress', (event) => {
+            if (event.detail.xhr.upload) {
+                const percent = Math.round((event.detail.loaded / event.detail.total) * 100);
+                updateProgressBar(percent);
+            }
+        });
+
+        // Adicionar listener para processar a resposta do servidor após o upload
+        document.body.addEventListener('htmx:afterOnLoad', function(event) {
+            if (event.detail.elt && event.detail.elt.id === 'upload-form') {
+                try {
+                    // Tentar parsear a resposta como JSON
+                    const response = JSON.parse(event.detail.xhr.responseText);
+
+                    if (response.success && response.files) {
+                        // Adicionar os arquivos processados à tabela de histórico
+                        updateUploadHistory(response.files);
+
+                        // Exibir mensagem de sucesso
+                        showMessage('success', response.message || 'Arquivos processados com sucesso!');
+                    } else {
+                        // Exibir mensagem de erro
+                        showMessage('error', response.message || 'Erro ao processar os arquivos.');
                     }
-                };
+                } catch (error) {
+                    console.error('Erro ao processar resposta:', error);
+                    showMessage('error', 'Erro ao processar a resposta do servidor.');
+                }
             }
         });
-
-        document.addEventListener('htmx:afterRequest', function(evt) {
-            // Esconder o contêiner de progresso após o término da requisição
-            document.getElementById('progressContainer').style.display = 'none';
-
-            if (evt.detail.xhr.status === 200) {
-                const response = evt.detail.xhr.responseText;
-                document.getElementById('uploadResponse').innerHTML =
-                    '<div class="upload-message success-message">' + response + '</div>';
-            } else {
-                const response = evt.detail.xhr.responseText || "Erro ao processar documentos";
-                document.getElementById('uploadResponse').innerHTML =
-                    '<div class="upload-message error-message">' + response + '</div>';
-            }
-        });
-
-        // Inicialmente ocultar o contêiner de progresso
-        document.getElementById('progressContainer').style.display = 'none';
     </script>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+`)
