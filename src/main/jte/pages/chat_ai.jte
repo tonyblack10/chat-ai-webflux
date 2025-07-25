@@ -62,7 +62,7 @@
                               required
                               aria-label="Mensagem"
                               autofocus></textarea>
-                    <button type="submit" class="btn btn-primary d-flex align-items-center">
+                    <button type="submit" class="btn btn-primary d-flex align-items-center" id="send-button">
                         <i class="bi bi-send-fill"></i>
                         <span class="d-none d-md-inline ms-2">Enviar</span>
                     </button>
@@ -70,7 +70,7 @@
             </form>
             <!-- Indicador de digitação -->
             <div id="typing-indicator" class="typing-indicator htmx-indicator mt-2">
-                <span>IA está digitando<span class="dot-typing">...</span></span>
+                <span>IA está pensando<span class="dot-typing">...</span></span>
             </div>
         </div>
     </div>
@@ -284,6 +284,7 @@
             const textarea = document.getElementById('message-input');
             const chatMessages = document.getElementById('chat-messages');
             const chatForm = document.getElementById('chat-form');
+            const sendButton = document.getElementById('send-button');
 
             // Configurar marked para segurança e estilização
             marked.setOptions({
@@ -336,16 +337,39 @@
                 subtree: true
             });
 
-            // Modificar envio do formulário para renderização local da mensagem do usuário
-            chatForm.addEventListener('submit', function(event) {
-                // Não interromper o fluxo do HTMX
-                // event.preventDefault();
+            // Adicionar handler para tecla Enter
+            textarea.addEventListener('keydown', function(event) {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault(); // Impede a quebra de linha
 
-                const message = textarea.value.trim();
-                if (message) {
-                    // Renderizar mensagem do usuário localmente
-                    addUserMessage(message);
+                    const message = textarea.value.trim();
+                    if (message) {
+                        // Simular clique no botão enviar
+                        sendButton.click();
+                    }
                 }
+            });
+
+            // Modificar envio do formulário para renderização local da mensagem do usuário
+            chatForm.addEventListener('htmx:before-request', function(event) {
+                const message = textarea.value.trim();
+
+                // Verificar se a mensagem está vazia
+                if (!message) {
+                    event.preventDefault();
+                    return;
+                }
+
+                // Renderizar mensagem do usuário localmente
+                addUserMessage(message);
+
+                // Limpar o campo imediatamente
+                textarea.value = '';
+                adjustTextareaHeight();
+
+                // Desabilitar campos durante o processamento
+                textarea.disabled = true;
+                sendButton.disabled = true;
             });
 
             // Função para adicionar mensagem do usuário
@@ -523,6 +547,41 @@
 
             // Inicializar efeitos de digitação existentes
             document.querySelectorAll('.typing-effect').forEach(initTypingEffect);
+
+            // Manipuladores de eventos HTMX para controle de estado
+            document.body.addEventListener('htmx:beforeRequest', function(e) {
+                if (e.detail.elt.id === 'chat-form') {
+                    // Desabilitar campos durante a requisição
+                    textarea.disabled = true;
+                    sendButton.disabled = true;
+                }
+            });
+
+            document.body.addEventListener('htmx:afterOnLoad', function(e) {
+                // Reabilitar campos após a resposta
+                textarea.disabled = false;
+                sendButton.disabled = false;
+
+                // Ajustar foco
+                textarea.focus();
+            });
+
+            document.body.addEventListener('htmx:responseError', function(e) {
+                // Reabilitar campos em caso de erro
+                textarea.disabled = false;
+                sendButton.disabled = false;
+
+                // Exibir mensagem de erro
+                console.error('Erro na comunicação com o servidor', e.detail);
+                alert('Ocorreu um erro ao enviar sua mensagem. Por favor, tente novamente.');
+            });
         });
+
+        // Escuta para função escapeHTML se ela não existir
+        function escapeHTML(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
     </script>
 `)
