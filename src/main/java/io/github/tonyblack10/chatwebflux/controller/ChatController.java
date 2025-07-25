@@ -24,14 +24,14 @@ public class ChatController {
 
   @PostMapping("/ask")
   public Flux<String> ask(QuestionDTO question) {
-    return chatService.askQuestion(question.message())
+    return chatService.askQuestion(question.message(), "")
         .map(this::createAssistantMessageHtml);
   }
 
   // Endpoint alternativo para API JSON se necessário
   @PostMapping(value = "/api/ask", produces = MediaType.APPLICATION_JSON_VALUE)
   public Flux<Answer> apiAsk(@RequestBody QuestionDTO question) {
-    return chatService.askQuestion(question.message())
+    return chatService.askQuestion(question.message(), "")
         .map(Answer::new);
   }
 

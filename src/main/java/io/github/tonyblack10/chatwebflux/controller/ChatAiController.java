@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.Map;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
@@ -24,11 +25,11 @@ public class ChatAiController {
   }
 
   @PostMapping(value = "/chat/send", produces = MediaType.TEXT_HTML_VALUE)
-  public Mono<String> chat(QuestionDTO question) {
+  public Mono<String> chat(QuestionDTO question, @RequestHeader("x-conversation-id") String conversationId) {
     System.out.println("Received question: " + question.message());
 
     // Usar o chatService para processar a mensagem de forma reativa
-    return chatService.askQuestion(question.message())
+    return chatService.askQuestion(question.message(), conversationId)
         .collectList()
         .map(chunks -> String.join("", chunks))
         .flatMap(aiResponse -> {
