@@ -67,6 +67,9 @@
         </div>
     </div>
 
+    <!-- Incluir marked.js para processamento de Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
+
     <style>
         /* Estilos do chat */
         .chat-container {
@@ -234,6 +237,17 @@
             const chatMessages = document.getElementById('chat-messages');
             const chatForm = document.getElementById('chat-form');
 
+            // Configurar marked para segurança e estilização
+            marked.setOptions({
+                breaks: true,           // Quebras de linha como no GitHub
+                sanitize: false,        // Não sanitizar (vamos fazer isso manualmente)
+                smartLists: true,       // Listas mais inteligentes
+                smartypants: true,      // Tipografia melhorada
+                highlight: function(code, lang) {
+                    return code; // Poderia implementar highlight.js aqui
+                }
+            });
+
             // Função para ajustar altura do textarea
             function adjustTextareaHeight() {
                 textarea.style.height = 'auto';
@@ -311,41 +325,81 @@
                 return div.innerHTML;
             }
 
-            // Efeito de digitação para as mensagens da IA
+            // Função para renderizar markdown de forma segura
+            function renderMarkdown(text) {
+                try {
+                    return marked.parse(text);
+                } catch (e) {
+                    console.error('Erro ao renderizar markdown:', e);
+                    return text;
+                }
+            }
+
+            // Efeito de digitação para as mensagens da IA - VERSÃO CORRIGIDA
             function initTypingEffect(element) {
                 if (!element || element.getAttribute('data-typing-started') === 'true') return;
 
                 element.setAttribute('data-typing-started', 'true');
-                const fullText = element.getAttribute('data-full-text');
-                if (!fullText) return;
+                const rawText = element.getAttribute('data-full-text');
+                if (!rawText) return;
 
-                const typingSpeed = 20; // velocidade de digitação (ms)
-                let i = 0;
+                // Criar um elemento temporário para armazenar o HTML renderizado
+                const tempContainer = document.createElement('div');
+                // Renderizar o markdown para HTML
+                tempContainer.innerHTML = renderMarkdown(rawText);
 
-                element.innerHTML = ''; // Limpar o conteúdo
+                // Extrair apenas o texto visível (sem as tags HTML)
+                const textContent = tempContainer.textContent || tempContainer.innerText || '';
+
+                // Configuração do efeito de digitação
+                const typingSpeed = 15; // velocidade de digitação (ms)
+                let charIndex = 0;
+
+                // Limpar o conteúdo do elemento original
+                element.innerHTML = '';
+
+                // Criar o cursor de digitação
                 const cursor = document.createElement('span');
                 cursor.className = 'cursor';
                 element.appendChild(cursor);
 
-                const typeCharacter = () => {
-                    if (i < fullText.length) {
-                        // Inserir antes do cursor
-                        cursor.insertAdjacentHTML('beforebegin', fullText.charAt(i));
-                        i++;
+                // Função para revelar o texto gradualmente
+                const typeNextChar = () => {
+                    if (charIndex < textContent.length) {
+                        // Calcular a porcentagem concluída
+                        const percentComplete = charIndex / textContent.length;
 
-                        // Aceleração do efeito de digitação para textos longos
-                        const speed = fullText.length > 500 ?
-                            (i > 100 ? typingSpeed/4 : typingSpeed/2) :
-                            typingSpeed;
+                        // Gerar HTML parcial com base na porcentagem
+                        // Isso preserva todas as tags HTML enquanto revela apenas parte do texto
+                        const visibleLength = Math.floor(percentComplete * rawText.length);
 
-                        setTimeout(typeCharacter, speed);
+                        // Renderizar o markdown parcial
+                        const partialHtml = renderMarkdown(rawText.substring(0, visibleLength) + '█');
+
+                        // Substituir o último caractere (█) pelo cursor
+                        const htmlWithoutLastChar = partialHtml.substring(0, partialHtml.lastIndexOf('█'));
+                        element.innerHTML = htmlWithoutLastChar;
+                        element.appendChild(cursor);
+
+                        // Avançar para o próximo caractere
+                        charIndex++;
+
+                        // Aceleração para textos longos
+                        let speed = typingSpeed;
+                        if (textContent.length > 500) {
+                            if (charIndex > 100) speed = typingSpeed / 4;
+                            else speed = typingSpeed / 2;
+                        }
+
+                        setTimeout(typeNextChar, speed);
                     } else {
                         // Quando terminar, usar o HTML completo para garantir formatação correta
-                        element.innerHTML = fullText;
+                        element.innerHTML = renderMarkdown(rawText);
                     }
                 };
 
-                setTimeout(typeCharacter, 300); // Pequeno atraso para iniciar a digitação
+                // Iniciar o efeito de digitação após um pequeno atraso
+                setTimeout(typeNextChar, 300);
             }
 
             // Limpar o campo após envio do formulário
