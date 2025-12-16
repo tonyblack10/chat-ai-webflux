@@ -1,8 +1,8 @@
 package io.github.tonyblack10.chatwebflux.controller;
 
 import io.github.tonyblack10.chatwebflux.service.RagService;
+import io.github.tonyblack10.chatwebflux.util.ResponseBuilder;
 import java.util.Map;
-import java.util.HashMap;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -28,22 +28,19 @@ public class RagController {
     return ragService.processDocuments(files)
         .collectList()
         .map(processedFiles -> {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "Documentos processados e armazenados no vector store com sucesso!");
-            response.put("files", processedFiles);
+            Map<String, Object> response = ResponseBuilder.success(
+                "Documentos processados e armazenados no vector store com sucesso!",
+                "files",
+                processedFiles
+            );
             return ResponseEntity.ok(response);
         })
         .onErrorResume(IllegalArgumentException.class, error -> {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", error.getMessage());
+            Map<String, Object> response = ResponseBuilder.error(error.getMessage());
             return Mono.just(ResponseEntity.badRequest().body(response));
         })
         .onErrorResume(Exception.class, error -> {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Erro interno: " + error.getMessage());
+            Map<String, Object> response = ResponseBuilder.error("Erro interno: " + error.getMessage());
             return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response));
         });
   }
@@ -54,15 +51,11 @@ public class RagController {
     return ragService.getUploadHistory()
         .collectList()
         .map(files -> {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("files", files);
+            Map<String, Object> response = ResponseBuilder.successWithData("files", files);
             return ResponseEntity.ok(response);
         })
         .onErrorResume(Exception.class, error -> {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Erro ao buscar histórico: " + error.getMessage());
+            Map<String, Object> response = ResponseBuilder.error("Erro ao buscar histórico: " + error.getMessage());
             return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response));
         });
   }
@@ -72,20 +65,15 @@ public class RagController {
   public Mono<ResponseEntity<Map<String, Object>>> deleteDocument(@PathVariable String fileName) {
     return ragService.deleteDocument(fileName)
         .map(deleted -> {
-            Map<String, Object> response = new HashMap<>();
-            if (deleted) {
-                response.put("success", true);
-                response.put("message", "Documento removido com sucesso");
-            } else {
-                response.put("success", false);
-                response.put("message", "Documento não encontrado");
-            }
+            Map<String, Object> response = ResponseBuilder.conditional(
+                deleted,
+                "Documento removido com sucesso",
+                "Documento não encontrado"
+            );
             return ResponseEntity.ok(response);
         })
         .onErrorResume(Exception.class, error -> {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Erro ao excluir documento: " + error.getMessage());
+            Map<String, Object> response = ResponseBuilder.error("Erro ao excluir documento: " + error.getMessage());
             return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response));
         });
   }

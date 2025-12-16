@@ -1,10 +1,8 @@
 package io.github.tonyblack10.chatwebflux.controller;
 
-import gg.jte.TemplateEngine;
-import gg.jte.output.StringOutput;
 import io.github.tonyblack10.chatwebflux.dto.QuestionDTO;
 import io.github.tonyblack10.chatwebflux.service.ChatService;
-import java.time.Duration;
+import io.github.tonyblack10.chatwebflux.util.TemplateRenderer;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.http.MediaType;
@@ -16,11 +14,11 @@ import reactor.core.publisher.Mono;
 @RestController
 public class ChatAiController {
 
-  private final TemplateEngine templateEngine;
+  private final TemplateRenderer templateRenderer;
   private final ChatService chatService;
 
-  public ChatAiController(TemplateEngine templateEngine, ChatService chatService) {
-    this.templateEngine = templateEngine;
+  public ChatAiController(TemplateRenderer templateRenderer, ChatService chatService) {
+    this.templateRenderer = templateRenderer;
     this.chatService = chatService;
   }
 
@@ -35,24 +33,14 @@ public class ChatAiController {
         .flatMap(aiResponse -> {
           Map<String, Object> model = new HashMap<>();
           model.put("response", aiResponse);
-
-          StringOutput output = new StringOutput();
-          templateEngine.render("fragments/ai_message.jte", model, output);
-
-          return Mono.just(output.toString());
+          return templateRenderer.render("fragments/ai_message.jte", model);
         });
   }
 
   @PostMapping(value = "/chat/new", produces = MediaType.TEXT_HTML_VALUE)
   public Mono<String> newChat() {
     // Limpar o histórico de chat e retornar mensagem inicial
-    Map<String, Object> model = new HashMap<>();
-    model.put("response", "<p>Olá! Como posso ajudar você hoje?</p>");
-
-    StringOutput output = new StringOutput();
-    templateEngine.render("fragments/ai_message.jte", model, output);
-
-    return Mono.just(output.toString());
+    return templateRenderer.render("fragments/ai_message.jte", "response", "<p>Olá! Como posso ajudar você hoje?</p>");
   }
 
   /**
