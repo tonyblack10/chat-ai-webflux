@@ -17,6 +17,15 @@ class ResponseBuilderTest {
   }
 
   @Test
+  void testSuccessWithData() {
+    Map<String, Object> response = ResponseBuilder.successWithData("files", 5);
+
+    assertEquals(true, response.get("success"));
+    assertEquals(5, response.get("files"));
+    assertNull(response.get("message"));
+  }
+
+  @Test
   void testSuccessWithMessageAndData() {
     Map<String, Object> response = ResponseBuilder.success("Files processed", "files", 5);
 

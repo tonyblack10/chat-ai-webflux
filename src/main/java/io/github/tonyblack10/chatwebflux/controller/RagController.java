@@ -51,7 +51,7 @@ public class RagController {
     return ragService.getUploadHistory()
         .collectList()
         .map(files -> {
-            Map<String, Object> response = ResponseBuilder.success("", "files", files);
+            Map<String, Object> response = ResponseBuilder.successWithData("files", files);
             return ResponseEntity.ok(response);
         })
         .onErrorResume(Exception.class, error -> {

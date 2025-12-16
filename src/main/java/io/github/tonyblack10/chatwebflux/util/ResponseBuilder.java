@@ -22,6 +22,19 @@ public class ResponseBuilder {
   }
 
   /**
+   * Creates a success response without a message, only success flag and data
+   * @param key Data key
+   * @param value Data value
+   * @return Map containing success flag and data
+   */
+  public static Map<String, Object> successWithData(String key, Object value) {
+    Map<String, Object> response = new HashMap<>();
+    response.put("success", true);
+    response.put(key, value);
+    return response;
+  }
+
+  /**
    * Creates a success response with a message and additional data
    * @param message Success message
    * @param key Additional data key
